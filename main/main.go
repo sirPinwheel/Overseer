@@ -1,4 +1,4 @@
-package main // version 1.0.0
+package main // version 0.0.2
 
 import (
 	"bufio"
@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gempir/go-twitch-irc"
-
+	"github.com/sirpinwheel/overseer/handlers"
 	"github.com/sirpinwheel/overseer/settings"
 )
 
@@ -50,13 +50,6 @@ func main() {
 		},
 	}
 
-	// string -> function map for commands called in chat by users
-	handlerMap := map[string]func(*twitch.PrivateMessage){
-		"hello": func(msg *twitch.PrivateMessage) {
-			fmt.Println("TEST COMPLETE")
-		},
-	}
-
 	// Hook / callback for general message type sent in chat
 	BotClient.OnPrivateMessage(func(message twitch.PrivateMessage) {
 		// Check if message is not empty
@@ -71,9 +64,9 @@ func main() {
 
 			// Check if message begins with prefix (a.k.a. is a command)
 			if strings.HasPrefix(message.Message, PREFIX) {
-				for k, v := range handlerMap {
+				for k, v := range handlers.Handlers {
 					if k == strings.TrimPrefix(message.Message, PREFIX) {
-						v(&message)
+						v(BotClient, &message)
 					}
 				}
 			}
