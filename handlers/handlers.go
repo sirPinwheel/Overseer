@@ -9,6 +9,7 @@ import (
 // Package for all the handlers that
 // are called when a command is sent
 
+// test
 func testHandler(*twitch.Client, *twitch.PrivateMessage) {
 	fmt.Println("TEST COMPLETE")
 }

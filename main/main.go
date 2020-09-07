@@ -1,4 +1,4 @@
-package main // version 0.0.2
+package main // version 0.0.3
 
 import (
 	"bufio"
@@ -10,67 +10,44 @@ import (
 	"github.com/gempir/go-twitch-irc"
 	"github.com/sirpinwheel/overseer/handlers"
 	"github.com/sirpinwheel/overseer/settings"
+	"github.com/sirpinwheel/overseer/utils"
 )
 
 // BotClient - exportin connection
 var BotClient *twitch.Client = twitch.NewClient(settings.BOT, settings.OAUTH)
 var ticker *time.Ticker = time.NewTicker(settings.PERIOD)
 
-// Function for halting the bot safely
-func stop() {
-	boterr := BotClient.Disconnect()
-	ticker.Stop()
+// string -> function map for commands called locally in console
+var consoleHandlerMap = map[string]func(string){
+	"stop": func(arguments string) {
+		stop()
+	},
 
-	if boterr != nil {
-		panic(boterr)
-	}
+	"say": func(arguments string) {
+		BotClient.Say(settings.CHANNEL, arguments)
+	},
 }
 
-func main() {
-	// string -> function map for commands called locally in console
-	consoleHandlerMap := map[string]func(string){
-		"stop": func(arguments string) {
-			stop()
-		},
+// string -> function map for commands called in chat by owner
+var adminHandlerMap = map[string]func(*twitch.PrivateMessage){
+	"stop": func(msg *twitch.PrivateMessage) {
+		stop()
+	},
+}
 
-		"say": func(arguments string) {
-			BotClient.Say(settings.CHANNEL, arguments)
-		},
-	}
-
-	// string -> function map for commands called in chat by owner
-	adminHandlerMap := map[string]func(*twitch.PrivateMessage){
-		"stop": func(msg *twitch.PrivateMessage) {
-			stop()
-		},
-	}
-
-	// Hook / callback for general message type sent in chat
-	BotClient.OnPrivateMessage(func(message twitch.PrivateMessage) {
-		// Check if message is not empty
-		if len(message.Message) != 0 {
-			if message.User.Name == settings.CHANNEL {
-				for k, v := range adminHandlerMap {
-					if k == strings.TrimPrefix(message.Message, settings.PREFIX) {
-						v(&message)
-					}
-				}
-			}
-
-			// Check if message begins with prefix (a.k.a. is a command)
-			if strings.HasPrefix(message.Message, settings.PREFIX) {
-				for k, v := range handlers.Handlers {
-					if k == strings.TrimPrefix(message.Message, settings.PREFIX) {
-						v(BotClient, &message)
-					}
-				}
-			}
-		}
-	})
-
+// Function for starting needed goroutines
+func start() {
 	// Greeting
 	fmt.Println("Connected to #" + settings.CHANNEL + " as " + settings.BOT)
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - - -")
+
+	// Goroutine for periodic task of giving current viewers a point
+	go func() {
+		for t := range ticker.C {
+			_ = t
+			utils.GrantPoint()
+		}
+	}()
 
 	// Goroutine for handling console input
 	go func() {
@@ -95,18 +72,50 @@ func main() {
 			}
 		}
 	}()
+}
 
-	// Goroutine for periodic task of giving current viewers a pint
-	go func() {
-		for t := range ticker.C {
-			_ = t
-			// TODO periodic task here
+// Function for halting the bot safely
+func stop() {
+	boterr := BotClient.Disconnect()
+	ticker.Stop()
+
+	if boterr != nil {
+		panic(boterr)
+	}
+}
+
+func main() {
+	// Hook / callback for general message type sent in chat
+	BotClient.OnPrivateMessage(func(message twitch.PrivateMessage) {
+		// Check if message is not empty
+		if len(message.Message) != 0 {
+			if message.User.Name == settings.CHANNEL {
+				for k, v := range adminHandlerMap {
+					if k == strings.TrimPrefix(message.Message, settings.PREFIX) {
+						v(&message)
+					}
+				}
+			}
+
+			// Check if message begins with prefix (a.k.a. is a command)
+			if strings.HasPrefix(message.Message, settings.PREFIX) {
+				for k, v := range handlers.Handlers {
+					if k == strings.TrimPrefix(message.Message, settings.PREFIX) {
+						v(BotClient, &message)
+					}
+				}
+			}
 		}
-	}()
+	})
 
 	// Joining channel
 	BotClient.Join(settings.CHANNEL)
+	BotClient.OnConnect(start)
+
+	fmt.Println("Connecting...")
+
 	err := BotClient.Connect()
+
 	if err != nil {
 		if !strings.Contains(err.Error(), "client called Disconnect()") {
 			panic(err)
