@@ -5,29 +5,24 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gempir/go-twitch-irc"
 	"github.com/sirpinwheel/overseer/handlers"
 	"github.com/sirpinwheel/overseer/settings"
 )
 
-// Exported global constants
-const (
-	CHANNEL string = settings.CHANNEL
-	BOT     string = settings.BOT
-	OAUTH   string = settings.OAUTH
-	PREFIX  string = settings.PREFIX
-)
-
 // BotClient - exportin connection
-var BotClient *twitch.Client = twitch.NewClient(BOT, OAUTH)
+var BotClient *twitch.Client = twitch.NewClient(settings.BOT, settings.OAUTH)
+var ticker *time.Ticker = time.NewTicker(settings.PERIOD)
 
 // Function for halting the bot safely
 func stop() {
-	err := BotClient.Disconnect()
+	boterr := BotClient.Disconnect()
+	ticker.Stop()
 
-	if err != nil {
-		panic(err)
+	if boterr != nil {
+		panic(boterr)
 	}
 }
 
@@ -39,7 +34,7 @@ func main() {
 		},
 
 		"say": func(arguments string) {
-			BotClient.Say(CHANNEL, arguments)
+			BotClient.Say(settings.CHANNEL, arguments)
 		},
 	}
 
@@ -54,18 +49,18 @@ func main() {
 	BotClient.OnPrivateMessage(func(message twitch.PrivateMessage) {
 		// Check if message is not empty
 		if len(message.Message) != 0 {
-			if message.User.Name == CHANNEL {
+			if message.User.Name == settings.CHANNEL {
 				for k, v := range adminHandlerMap {
-					if k == strings.TrimPrefix(message.Message, PREFIX) {
+					if k == strings.TrimPrefix(message.Message, settings.PREFIX) {
 						v(&message)
 					}
 				}
 			}
 
 			// Check if message begins with prefix (a.k.a. is a command)
-			if strings.HasPrefix(message.Message, PREFIX) {
+			if strings.HasPrefix(message.Message, settings.PREFIX) {
 				for k, v := range handlers.Handlers {
-					if k == strings.TrimPrefix(message.Message, PREFIX) {
+					if k == strings.TrimPrefix(message.Message, settings.PREFIX) {
 						v(BotClient, &message)
 					}
 				}
@@ -74,7 +69,7 @@ func main() {
 	})
 
 	// Greeting
-	fmt.Println("Connected to #" + CHANNEL + " as " + BOT)
+	fmt.Println("Connected to #" + settings.CHANNEL + " as " + settings.BOT)
 	fmt.Println("- - - - - - - - - - - - - - - - - - - - - - -")
 
 	// Goroutine for handling console input
@@ -101,8 +96,16 @@ func main() {
 		}
 	}()
 
+	// Goroutine for periodic task of giving current viewers a pint
+	go func() {
+		for t := range ticker.C {
+			_ = t
+			// TODO periodic task here
+		}
+	}()
+
 	// Joining channel
-	BotClient.Join(CHANNEL)
+	BotClient.Join(settings.CHANNEL)
 	err := BotClient.Connect()
 	if err != nil {
 		if !strings.Contains(err.Error(), "client called Disconnect()") {
