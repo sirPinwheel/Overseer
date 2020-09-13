@@ -45,7 +45,13 @@ func start() {
 	go func() {
 		for t := range ticker.C {
 			_ = t
-			utils.GrantPoint()
+			users, err := BotClient.Userlist(settings.CHANNEL)
+
+			if err != nil {
+				panic(err)
+			}
+
+			utils.GrantPoint(&users)
 		}
 	}()
 
